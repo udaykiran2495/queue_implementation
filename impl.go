@@ -2,68 +2,119 @@
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+	"time"
+)
 
 type Queue struct {
-	items   [100]interface{}
+	items   []interface{}
 	current int
 	qstart  int
+	size    int
+	capacity int
+	mutex   sync.Mutex
 }
 
-func (q *Queue) Enqueue(value interface{}) {
+func (q *Queue) Enqueue(value interface{}) bool {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.size >= q.capacity {
+		fmt.Println("Queue is full, cannot enqueue:", value)
+		return false
+	}
+
 	q.items[q.current] = value
-
 	q.current++
+	q.size++
 
-	if q.current == 100 {
+	if q.current == q.capacity {
 		q.current = 0
 	}
 
 	fmt.Println("Enqueued:", value)
-
+	return true
 }
 
-func (q *Queue) Dequeue() interface{} {
+func (q *Queue) Dequeue() (interface{}, bool) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.size == 0 {
+		fmt.Println("Queue is empty, cannot dequeue")
+		return nil, false
+	}
+
 	value := q.items[q.qstart]
-
 	q.qstart++
+	q.size--
 
-	if q.qstart == 100 {
+	if q.qstart == q.capacity {
 		q.qstart = 0
 	}
 
-	return value
+	return value, true
 }
 
 func main() {
 
-	Q := Queue{}
-	Q.current = 0
-	Q.qstart = 0
+	Q := Queue{
+		items:    make([]interface{}, 100),
+		current:  0,
+		qstart:   0,
+		size:     0,
+		capacity: 100,
+	}
 
 	for i := 1; i <= 100; i++ {
 		Q.Enqueue(i)
 	}
 
-	item := Q.Dequeue()
-
-	fmt.Println(item) // should print 1
-
-	S := Queue{}
-	S.current = 0
-	S.qstart = 0
-
-	// queue other data structures
-
-	S.Enqueue("Hello")
-	S.Enqueue(3.14)
-
-	for i := 1; i <= 5; i++ {
-		S.Enqueue(i)
+	item, ok := Q.Dequeue()
+	if ok {
+		fmt.Println("Dequeued:", item)
 	}
 
-	for i := 1; i <= 5; i++ {
-		fmt.Println(S.Dequeue())
+	// Thread-safe concurrent demonstration
+	concurrentQueue := Queue{
+		items:    make([]interface{}, 100),
+		current:  0,
+		qstart:   0,
+		size:     0,
+		capacity: 100,
 	}
 
+	var wg sync.WaitGroup
+
+	// Producer goroutines
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go func(producerID int) {
+			defer wg.Done()
+			for j := 1; j <= 10; j++ {
+				value := fmt.Sprintf("P%d-Item%d", producerID, j)
+				concurrentQueue.Enqueue(value)
+				time.Sleep(100 * time.Millisecond)
+			}
+		}(i)
+	}
+
+	// Consumer goroutines
+	for i := 1; i <= 2; i++ {
+		wg.Add(1)
+		go func(consumerID int) {
+			defer wg.Done()
+			for j := 1; j <= 15; j++ {
+				if item, ok := concurrentQueue.Dequeue(); ok {
+					fmt.Printf("Consumer %d dequeued: %v\n", consumerID, item)
+				}
+				time.Sleep(150 * time.Millisecond)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	fmt.Println("All goroutines completed")
 }
