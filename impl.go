@@ -117,4 +117,63 @@ func main() {
 
 	wg.Wait()
 	fmt.Println("All goroutines completed")
+
+	// Channel-based queue demonstration
+	fmt.Println("\n=== Channel Queue Demo ===")
+	channelQueue := NewChannelQueue(10)
+
+	// Add some items
+	for i := 1; i <= 5; i++ {
+		if channelQueue.Enqueue(i) {
+			fmt.Printf("Successfully enqueued: %d\n", i)
+		}
+	}
+
+	// Remove items
+	for i := 1; i <= 3; i++ {
+		if item, ok := channelQueue.Dequeue(); ok {
+			fmt.Println("Channel dequeued:", item)
+		}
+	}
+
+	fmt.Printf("Channel queue size: %d\n", channelQueue.Size())
+	channelQueue.Close()
+}
+
+func NewChannelQueue(capacity int) *ChannelQueue {
+	return &ChannelQueue{
+		channel:  make(chan interface{}, capacity),
+		capacity: capacity,
+	}
+}
+
+type ChannelQueue struct {
+	channel  chan interface{}
+	capacity int
+}
+
+func (cq *ChannelQueue) Enqueue(value interface{}) bool {
+	select {
+	case cq.channel <- value:
+		return true
+	default:
+		return false
+	}
+}
+
+func (cq *ChannelQueue) Dequeue() (interface{}, bool) {
+	select {
+	case value := <-cq.channel:
+		return value, true
+	default:
+		return nil, false
+	}
+}
+
+func (cq *ChannelQueue) Size() int {
+	return len(cq.channel)
+}
+
+func (cq *ChannelQueue) Close() {
+	close(cq.channel)
 }
